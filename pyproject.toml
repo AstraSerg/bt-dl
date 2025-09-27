@@ -5,12 +5,12 @@ build-backend = "poetry.core.masonry.api"
 [project]
 name = "bt-dl-bot"
 version = "0.1.0"
-description = "Telegram bot that searches user queries on torrent trackers"
+description = "Telegram bot for searching and downloading torrents from Rutracker with forum filtering"
 readme = "README.md"
 authors = [{name = "Sergey", email = "astraser@gmail.com"}]
 license = {text = "MIT"}
 requires-python = ">=3.9"
-keywords = ["telegram", "bot", "torrent", "search", "aiogram", "bt-dl"]
+keywords = ["telegram", "bot", "torrent", "rutracker", "aiogram", "bt-dl"]
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License",
@@ -21,6 +21,8 @@ classifiers = [
 dependencies = [
     "aiogram>=3.0.0",
     "python-dotenv>=1.0.0",
+    "httpx>=0.25.0",
+    "beautifulsoup4>=4.12.0",
 ]
 
 [project.scripts]
