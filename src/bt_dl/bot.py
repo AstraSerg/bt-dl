@@ -5,7 +5,8 @@ import re
 from pathlib import Path
 from urllib.parse import urljoin, quote
 from aiogram import Bot, Dispatcher
-from aiogram.filters import Command, Text
+from aiogram.filters import Command
+from aiogram import F
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from aiogram.exceptions import TelegramBadRequest
 from dotenv import load_dotenv
@@ -233,7 +234,7 @@ async def handle_search(message: Message):
     except TelegramBadRequest:
         await message.answer("Слишком много данных. Уточните запрос.")
 
-@dp.callback_query(Text(startswith="forum_"))
+@dp.callback_query(F.data.startswith("forum_"))
 async def handle_forum_filter(callback: CallbackQuery):
     user_id = callback.from_user.id
     session = user_search_sessions.get(user_id)
@@ -281,7 +282,7 @@ async def handle_forum_filter(callback: CallbackQuery):
     except TelegramBadRequest:
         await callback.message.answer("Слишком много результатов.")
 
-@dp.callback_query(Text(startswith="select_"))
+@dp.callback_query(F.data.startswith("select_"))
 async def handle_selection(callback: CallbackQuery):
     user_id = callback.from_user.id
     session = user_search_sessions.get(user_id)
@@ -328,13 +329,13 @@ async def handle_selection(callback: CallbackQuery):
     )
     user_search_sessions.pop(user_id, None)
 
-@dp.callback_query(Text("cancel"))
+@dp.callback_query(F.data == "cancel")
 async def handle_cancel(callback: CallbackQuery):
     user_search_sessions.pop(callback.from_user.id, None)
     await callback.message.edit_text("❌ Поиск отменён.")
     await callback.answer()
 
-@dp.callback_query(Text("noop"))
+@dp.callback_query(F.data == "noop")
 async def noop(callback: CallbackQuery):
     await callback.answer()
 
