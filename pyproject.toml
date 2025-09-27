@@ -1,0 +1,33 @@
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[project]
+name = "bt-dl-bot"
+version = "0.1.0"
+description = "Telegram bot that searches user queries on torrent trackers"
+readme = "README.md"
+authors = [{name = "Sergey", email = "astraser@gmail.com"}]
+license = {text = "MIT"}
+requires-python = ">=3.9"
+keywords = ["telegram", "bot", "torrent", "search", "aiogram", "bt-dl"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Topic :: Communications :: Chat",
+    "Topic :: Internet",
+]
+dependencies = [
+    "aiogram>=3.0.0",
+    "python-dotenv>=1.0.0",
+]
+
+[project.scripts]
+bt-dl-bot = "bt_dl.bot:main"
+
+[project.urls]
+Homepage = "https://github.com/AstraSerg/bt-dl"
+Repository = "https://github.com/AstraSerg/bt-dl"
+Issues = "https://github.com/AstraSerg/bt-dl/issues"
+
