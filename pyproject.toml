@@ -55,8 +55,6 @@ bt-dl-bot = "bt_dl.bot:main"
 [tool.poetry.build]
 generate-setup-file = false
 
-[tool.poetry.package-mode]
-
 [[tool.poetry.packages]]
 include = "bt_dl"
 from = "src"
