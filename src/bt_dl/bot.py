@@ -9,11 +9,11 @@ from aiogram.filters import Command
 from aiogram import F
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from aiogram.exceptions import TelegramBadRequest
-from dotenv import load_dotenv
+from dotenv import load_dotenv, find_dotenv
 from httpx import AsyncClient, TimeoutException
 from bs4 import BeautifulSoup
 
-load_dotenv()
+load_dotenv(find_dotenv())
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 RUTRACKER_LOGIN = os.getenv("RUTRACKER_LOGIN")
