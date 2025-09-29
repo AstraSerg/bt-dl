@@ -9,20 +9,21 @@ from aiogram.filters import Command
 from aiogram import F
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from aiogram.exceptions import TelegramBadRequest
-from dotenv import load_dotenv, find_dotenv
+from dotenv import dotenv_values
 from httpx import AsyncClient, TimeoutException
 from bs4 import BeautifulSoup
 
-load_dotenv(find_dotenv())
+config = dotenv_values()
 
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-RUTRACKER_LOGIN = os.getenv("RUTRACKER_LOGIN")
-RUTRACKER_PASSWORD = os.getenv("RUTRACKER_PASSWORD")
-TORRENTS_DIR = os.getenv("TORRENTS_DIR", "./torrents")
-USER_AGENT = os.getenv("USER_AGENT", "bt-dl-bot/0.1")
+BOT_TOKEN = config.get("BOT_TOKEN")
+RUTRACKER_LOGIN = config.get("RUTRACKER_LOGIN")
+RUTRACKER_PASSWORD = config.get("RUTRACKER_PASSWORD")
+TORRENTS_DIR = config.get("TORRENTS_DIR", "./torrents")
+USER_AGENT = config.get("USER_AGENT", "bt-dl-bot/0.1")
 
 if not BOT_TOKEN:
     raise RuntimeError("❌ BOT_TOKEN не задан в .env")
+
 
 Path(TORRENTS_DIR).mkdir(parents=True, exist_ok=True)
 USE_RUTRACKER_AUTH = bool(RUTRACKER_LOGIN and RUTRACKER_PASSWORD)
