@@ -48,7 +48,7 @@ httpx = "^0.25.0"
 beautifulsoup4 = "^4.12.0"
 
 [tool.poetry.scripts]
-bt-dl-bot = "bt_dl.bot:main"
+bt-dl-bot = "bt_dl.bot:cli"
 
 [tool.poetry.group.dev.dependencies]
 

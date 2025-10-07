@@ -352,6 +352,10 @@ async def main():
         if rutracker_client:
             await rutracker_client.close()
 
+def cli():
+    """CLI entry point for Poetry script."""
+    asyncio.run(main())
+
 if __name__ == "__main__":
     asyncio.run(main())
 
