@@ -12,6 +12,7 @@ from aiogram.exceptions import TelegramBadRequest
 from dotenv import dotenv_values
 from httpx import AsyncClient, TimeoutException
 from bs4 import BeautifulSoup
+from typing import Optional
 
 config = dotenv_values()
 
@@ -72,7 +73,7 @@ class RutrackerClient:
             print(f"Ошибка входа: {e}")
             return False
 
-    async def search(self, query: str, forum_id: str | None = None):
+    async def search(self, query: str, forum_id: Optional[str] = None):
         if not self.is_logged_in:
             raise RuntimeError("Не авторизован")
 
