@@ -19,7 +19,8 @@
 
 Install directly from GitHub:
 ```bash
-pip install -e git+https://github.com/AstraSerg/bt-dl.git
+git clone https://github.com/AstraSerg/bt-dl.git
+cd bt-dl; pip install -e .
 ```
 ## Configuration
 
