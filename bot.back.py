@@ -26,12 +26,12 @@ if not BOT_TOKEN:
 
 
 Path(TORRENTS_DIR).mkdir(parents=True, exist_ok=True)
-USE_TRACKER_AUTH = bool(TRACKER_LOGIN and TRACKER_PASSWORD)
+USE_RUTRACKER_AUTH = bool(TRACKER_LOGIN and TRACKER_PASSWORD)
 
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
-# Cache: user_id -> { "query": "...", "results": [...], "forum_filter": None }
+# Кэш: user_id -> { "query": "...", "results": [...], "forum_filter": None }
 user_search_sessions = {}
 
 class RutrackerClient:
@@ -47,54 +47,56 @@ class RutrackerClient:
         )
         self.is_logged_in = False
 
+
+
+
     async def login(self) -> bool:
         try:
             print("\n" + "="*60)
-            print("🔍 STARTING TRACKER LOGIN PROCESS")
+            print("🔍 НАЧАЛО ПРОЦЕССА ВХОДА НА RUTRACKER")
             print("="*60)
 
-            # Step 1: Request login page
-            print(f"➡️ 1. Requesting {self.base_url}login.php")
+            # Шаг 1: Запрос страницы входа
+            print("➡️ 1. Запрашиваем https://rutracker.org/forum/login.php")
             resp = await self.client.get(f"{self.base_url}login.php")
-            print(f"   Status: {resp.status_code}")
-            print(f"   URL after redirect: {resp.url}")
+            print(f"   Статус: {resp.status_code}")
+            print(f"   URL после редиректа: {resp.url}")
 
-            # Save HTML for analysis
-            file_name = "/tmp/debug_login.html"
-            with open(file_name, "w", encoding="utf-8") as f:
+            # Сохраняем HTML для анализа
+            with open("/tmp/rutracker_debug_login.html", "w", encoding="utf-8") as f:
                 f.write(resp.text)
-            print(f"   📄 HTML saved to {file_name}")
+            print("   📄 HTML сохранён в /tmp/rutracker_debug_login.html")
 
-            # Check for CAPTCHA or blocking
+            # Проверяем, не перенаправило ли на CAPTCHA или блокировку
             if "captcha" in resp.text.lower() or "blocked" in resp.text.lower():
-                print("   ⚠️ CAPTCHA or blocking detected!")
+                print("   ⚠️ Обнаружена CAPTCHA или блокировка!")
                 return False
 
-            # Step 2: Parse login form
-            print("\n➡️ 2. Looking for login form...")
+            # Шаг 2: Парсим форму
+            print("\n➡️ 2. Ищем форму входа...")
             soup = BeautifulSoup(resp.text, "html.parser")
 
-            # Look for new form ID
+            # Ищем по новому ID
             form = soup.find("form", {"id": "login-form-quick"})
             if not form:
-                print("   ❌ Form with id='login-form-quick' NOT FOUND")
-                # Try to find any form with login_username
+                print("   ❌ Форма с id='login-form-quick' НЕ НАЙДЕНА")
+                # Попробуем найти любую форму с login_username
                 form = soup.find("input", {"name": "login_username"})
                 if form:
-                    print("   ⚠️ Found login_username field, but form not recognized")
+                    print("   ⚠️ Найдено поле login_username, но форма не распознана")
                     form = form.find_parent("form")
                     if form:
-                        print("   ✅ Found form via parent of login_username field")
+                        print("   ✅ Найдена форма через родителя поля login_username")
                     else:
-                        print("   ❌ Parent form not found")
+                        print("   ❌ Родительская форма не найдена")
                 else:
-                    print("   ❌ login_username field not found in HTML")
+                    print("   ❌ Поле login_username не найдено в HTML")
                     return False
             else:
-                print("   ✅ Form found by id='login-form-quick'")
+                print("   ✅ Форма найдена по id='login-form-quick'")
 
-            # Step 3: Collect form data
-            print("\n➡️ 3. Collecting form data:")
+            # Шаг 3: Собираем данные формы
+            print("\n➡️ 3. Собираем данные формы:")
             data = {}
             for inp in form.find_all("input"):
                 name = inp.get("name")
@@ -103,59 +105,62 @@ class RutrackerClient:
                     data[name] = value
                     print(f"   {name} = {value}")
 
-            # Add credentials
+            # Добавляем учётные данные
             data["login_username"] = self.username
             data["login_password"] = self.password
-            data["login"] = "вход"  # lowercase is required!
+            data["login"] = "вход"  # именно строчная буква!
             print(f"   login_username = {self.username}")
             print(f"   login_password = {'*' * len(self.password)}")
             print(f"   login = вход")
 
-            # Step 4: Submit form
-            print("\n➡️ 4. Submitting data to server...")
+            # Шаг 4: Отправляем форму
+            print("\n➡️ 4. Отправляем данные на сервер...")
             post_resp = await self.client.post(f"{self.base_url}login.php", data=data)
-            print(f"   Response status: {post_resp.status_code}")
-            print(f"   URL after submission: {post_resp.url}")
+            print(f"   Статус ответа: {post_resp.status_code}")
+            print(f"   URL после отправки: {post_resp.url}")
 
-            # Save response
-            file_name = "/tmp/debug_after_login.html"
-            with open(file_name, "w", encoding="utf-8") as f:
+            # Сохраняем ответ
+            with open("/tmp/rutracker_debug_after_login.html", "w", encoding="utf-8") as f:
                 f.write(post_resp.text)
-            print(f"   📄 Response saved to {file_name}")
+            print("   📄 Ответ сохранён в /tmp/rutracker_debug_after_login.html")
 
-            # Step 5: Check login success
-            print("\n➡️ 5. Checking if login succeeded...")
+            # Шаг 5: Проверяем успешность
+            print("\n➡️ 5. Проверяем, вошли ли мы...")
             if "profile.php" in post_resp.text:
-                print("   ✅ SUCCESS: profile.php link found")
+                print("   ✅ УСПЕХ: найдена ссылка на profile.php")
                 self.is_logged_in = True
                 return True
             elif "Выход" in post_resp.text:
-                print("   ✅ SUCCESS: 'Logout' button found")
+                print("   ✅ УСПЕХ: найдена кнопка 'Выход'")
                 self.is_logged_in = True
                 return True
             elif "Неверное имя или пароль" in post_resp.text:
-                print("   ❌ ERROR: Invalid username or password")
+                print("   ❌ ОШИБКА: Неверный логин или пароль")
                 return False
             elif "captcha" in post_resp.text.lower():
-                print("   ❌ ERROR: CAPTCHA required")
+                print("   ❌ ОШИБКА: Требуется CAPTCHA")
                 return False
             else:
-                print("   ❌ UNKNOWN ERROR: could not determine login status")
-                # Show HTML snippet
-                snippet_length = 500
-                snippet = post_resp.text[:snippet_length].replace('\n', ' ')
-                print(f"   First {snippet_length} characters of response: {snippet}...")
+                print("   ❌ НЕИЗВЕСТНАЯ ОШИБКА: не удалось определить статус входа")
+                # Покажем фрагмент HTML
+                snippet = post_resp.text[:500].replace('\n', ' ')
+                print(f"   Первые 500 символов ответа: {snippet}...")
                 return False
 
         except Exception as e:
-            print(f"\n💥 CRITICAL ERROR: {e}")
+            print(f"\n💥 КРИТИЧЕСКАЯ ОШИБКА: {e}")
             import traceback
             traceback.print_exc()
             return False
         finally:
             print("="*60)
-            print("END OF LOGIN PROCESS")
+            print("КОНЕЦ ПРОЦЕССА ВХОДА")
             print("="*60 + "\n")
+
+
+
+
+
 
     async def search(self, query: str, forum_id: Optional[str] = None):
         if not self.is_logged_in:
@@ -170,10 +175,9 @@ class RutrackerClient:
         resp = await self.client.get(url)
         print(f"Search status: {resp.status_code}")
 
-        file_name = "/tmp/search.html"
-        with open(file_name, "w", encoding="utf-8") as f:
+        with open("/tmp/rutracker_search.html", "w", encoding="utf-8") as f:
             f.write(resp.text)
-        print(f"Search results saved to {file_name}")
+        print("Search results saved to /tmp/rutracker_search.html")
 
         soup = BeautifulSoup(resp.text, "html.parser")
 
@@ -200,6 +204,9 @@ class RutrackerClient:
                     continue
 
                 topic_url = urljoin(self.base_url, link["href"])
+                row = link.find_parent("tr")
+                if not row:
+                    continue
 
                 # Forum
                 forum_tag = row.select_one("td.f-name-col a.gen.f")
@@ -233,6 +240,12 @@ class RutrackerClient:
         print(f"Parsed results: {len(results)}")
         return results
 
+
+
+
+
+
+
     async def download_torrent(self, topic_url: str):
         print(f"\n{'='*60}")
         print(f"📥 START DOWNLOAD TORRENT")
@@ -247,10 +260,9 @@ class RutrackerClient:
             print(f"   Status: {topic_resp.status_code}")
 
             # Save HTML for analysis
-            file_name = "/tmp/topic.html"
-            with open(file_name, "w", encoding="utf-8") as f:
+            with open("/tmp/rutracker_topic.html", "w", encoding="utf-8") as f:
                 f.write(topic_resp.text)
-            print(f"   📄 Topic page saved to {file_name}")
+            print("   📄 Topic page saved to /tmp/rutracker_topic.html")
 
             # Step 2: Parse HTML
             print("\n➡️ 2. Parsing HTML for torrent link...")
@@ -318,72 +330,74 @@ class RutrackerClient:
             print(f"{'='*60}")
             raise
 
+
+
+
+
+
+
+
     async def close(self):
         await self.client.aclose()
 
-tracker_client = None
+rutracker_client = None
 
-async def get_tracker_client():
-    global tracker_client
-    if tracker_client is None and USE_TRACKER_AUTH:
-        tracker_client = RutrackerClient(TRACKER_LOGIN, TRACKER_PASSWORD, USER_AGENT)
-        if not await tracker_client.login():
-            tracker_client = None
-    return tracker_client
+async def get_rutracker_client():
+    global rutracker_client
+    if rutracker_client is None and USE_RUTRACKER_AUTH:
+        rutracker_client = RutrackerClient(TRACKER_LOGIN, TRACKER_PASSWORD, USER_AGENT)
+        if not await rutracker_client.login():
+            rutracker_client = None
+    return rutracker_client
 
 def build_keyboard_with_forums(results: list) -> InlineKeyboardMarkup:
-    max_forums_count = 10
-    max_forum_name_length = 40
-    max_results_count = 30
-    max_torrent_name_length = 40
     buttons = []
 
-    # Collect unique forums
+    # Собираем уникальные форумы
     forums = {}
-    for result in results:
-        forum_id = result.get("forum_id")
-        forum_name = result.get("forum_name", "Unknown")
-        if forum_id and forum_id not in forums:
-            forums[forum_id] = forum_name
+    for r in results:
+        fid = r.get("forum_id")
+        fname = r.get("forum_name", "Без названия")
+        if fid and fid not in forums:
+            forums[fid] = fname
 
-    # Add forum buttons (if any)
+    # Добавляем кнопки форумов (если есть)
     if forums:
-        for fid, forum_name in list(forums.items())[:max_forums_count]:
-            if len(forum_name) > max_forum_name_length:
-                forum_name_short = forum_name[:max_forum_name_length] + "..."
-            else:
-                forum_name_short = forum_name
-            buttons.append([InlineKeyboardButton(text=f"🝖 {forum_name_short}", callback_data=f"forum_{forum_id}")])
-        buttons.append([])  # empty line
+        for fid, fname in list(forums.items())[:10]:  # макс. 10 форумов
+            fname_short = (fname[:25] + "...") if len(fname) > 25 else fname
+            buttons.append([InlineKeyboardButton(text=f"📁 {fname_short}", callback_data=f"forum_{fid}")])
+        buttons.append([])  # пустая строка
 
-    # Add torrent buttons
-    for i, result in enumerate(results[:max_results_count]):
-        title_short = (result["title"][:max_torrent_name_length] + "...") if len(result["title"]) > max_torrent_name_length else result["title"]
-        btn_text = f"{i + 1}. 🎬 {title_short}"
-        btn = InlineKeyboardButton(text=btn_text, callback_data=f"select_{i}")
+    # Кнопки раздач
+    for i, r in enumerate(results[:30]):
+        title_short = (r["title"][:35] + "...") if len(r["title"]) > 35 else r["title"]
+        btn = InlineKeyboardButton(
+            text=f"🎬 {title_short} ({r['seeders']})",
+            callback_data=f"select_{i}"
+        )
         buttons.append([btn])
 
-    buttons.append([InlineKeyboardButton(text="❌ Cancel", callback_data="cancel")])
+    buttons.append([InlineKeyboardButton(text="❌ Отмена", callback_data="cancel")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 @dp.message(Command("start"))
 async def send_welcome(message: Message):
-    await message.answer("🔍 Enter a search query to find torrents on Rutracker.")
+    await message.answer("🔍 Напиши название раздачи для поиска на Rutracker.")
 
 @dp.message()
 async def handle_search(message: Message):
     query = message.text.strip()
     if not query:
-        await message.answer("Please enter a search query.")
+        await message.answer("Введите запрос.")
         return
 
-    if not USE_TRACKER_AUTH:
-        await message.answer("❌ Bot is not configured for Rutracker.")
+    if not USE_RUTRACKER_AUTH:
+        await message.answer("❌ Бот не настроен для Rutracker.")
         return
 
     await message.answer("🔍 Searching...")
 
-    client = await get_tracker_client()
+    client = await get_rutracker_client()
     if not client:
         await message.answer("❌ Authentication error.")
         return
@@ -398,39 +412,36 @@ async def handle_search(message: Message):
         await message.answer("Nothing found")
         return
 
-    # Save search session
+    # Сохраняем сессию поиска
     user_search_sessions[message.from_user.id] = {
         "query": query,
         "results": results,
         "forum_filter": None
     }
 
-    # Build message text
-    text = f"Found {len(results)} results:\n\n"
+    # Формируем текст
+    text = f"Найдено {len(results)} результатов:\n\n"
 
-    # Add forum list if available
+    # Добавляем список форумов, если есть
     forums = {}
     for r in results:
         fid = r.get("forum_id")
-        fname = r.get("forum_name", "Unknown")
+        fname = r.get("forum_name", "Без названия")
         if fid and fid not in forums:
             forums[fid] = fname
 
-    '''
     if forums:
-        text += "📂 **Forum filters:**\n"
-        for fname in list(forums.values())[:5]:  # show first 5
+        text += "📂 **Фильтры по разделам:**\n"
+        for fname in list(forums.values())[:5]:  # покажем первые 5
             text += f"• {fname}\n"
         text += "\n"
-    '''
-    # Add torrents
-    max_torrents_count = 15
-    for i, result in enumerate(results[:max_torrents_count]):
-        text += (f"{i + 1}. {result['title']}\nForum: {result['forum_name']}\n"
-                 f"Size: {result['size']} | Seeders: {result['seeders']}\n\n")
 
-    if len(results) > max_torrents_count:
-        text += f"... and {len(results) - max_torrents_count} more torrents."
+    # Добавляем раздачи
+    for i, r in enumerate(results[:8]):
+        text += f"{i+1}. {r['title']}\n   📁 {r['forum_name']}\n   📦 {r['size']} | 💎 {r['seeders']}\n\n"
+
+    if len(results) > 8:
+        text += f"... и ещё {len(results) - 8} раздач."
 
     try:
         await message.answer(
@@ -439,62 +450,62 @@ async def handle_search(message: Message):
             disable_web_page_preview=True
         )
     except TelegramBadRequest:
-        await message.answer("Too much data. Please refine your query.")
+        await message.answer("Слишком много данных. Уточните запрос.")
 
 @dp.callback_query(F.data.startswith("forum_"))
 async def handle_forum_filter(callback: CallbackQuery):
     user_id = callback.from_user.id
     session = user_search_sessions.get(user_id)
     if not session:
-        await callback.answer("Session expired.", show_alert=True)
+        await callback.answer("Сессия устарела.", show_alert=True)
         return
 
     forum_id = callback.data.split("_", 1)[1]
     query = session["query"]
 
-    await callback.answer(f"🔍 Searching in forum...", show_alert=False)
-    await callback.message.edit_text("🔄 Performing search in selected forum...")
+    await callback.answer(f"🔍 Ищу в разделе...", show_alert=False)
+    await callback.message.edit_text("🔄 Выполняю поиск в выбранном разделе...")
 
-    client = await get_tracker_client()
+    client = await get_rutracker_client()
     if not client:
-        await callback.message.answer("❌ Rutracker session unavailable.")
+        await callback.message.answer("❌ Нет сессии Rutracker.")
         return
 
     try:
         results = await client.search(query, forum_id=forum_id)
     except Exception as e:
-        await callback.message.answer(f"❌ Error: {e}")
+        await callback.message.answer(f"❌ Ошибка: {e}")
         return
 
     if not results:
-        await callback.message.edit_text("Nothing found in this forum.")
+        await callback.message.edit_text("В этом разделе ничего не найдено.")
         return
 
-    # Update session
+    # Обновляем сессию
     user_search_sessions[user_id] = {
         "query": query,
         "results": results,
         "forum_filter": forum_id
     }
 
-    text = f"Results in forum:\n\n"
-    for i, result in enumerate(results[:15]):
-        text += f"{i + 1}. {result['title']}\nSize: {result['size']} | Seeders: {result['seeders']}\n\n"
+    text = f"Результаты в разделе:\n\n"
+    for i, r in enumerate(results[:8]):
+        text += f"{i+1}. {r['title']}\nsize: {r['size']} | seeders: {r['seeders']}\n\n"
 
-    if len(results) > 15:
-        text += f"... and {len(results) - 15} more torrents."
+    if len(results) > 8:
+        text += f"... и ещё {len(results) - 8} раздач."
 
     try:
         await callback.message.edit_text(text, reply_markup=build_keyboard_with_forums(results))
     except TelegramBadRequest:
-        await callback.message.answer("Too many results.")
+        await callback.message.answer("Слишком много результатов.")
 
 @dp.callback_query(F.data.startswith("select_"))
 async def handle_selection(callback: CallbackQuery):
     user_id = callback.from_user.id
     session = user_search_sessions.get(user_id)
     if not session:
-        await callback.answer("Session expired.", show_alert=True)
+        await callback.answer("Сессия устарела.", show_alert=True)
         return
 
     try:
@@ -502,20 +513,20 @@ async def handle_selection(callback: CallbackQuery):
         results = session["results"]
         selected = results[index]
     except (IndexError, ValueError, KeyError):
-        await callback.answer("Invalid selection.", show_alert=True)
+        await callback.answer("Неверный выбор.", show_alert=True)
         return
 
-    await callback.answer("📥 Downloading torrent...", show_alert=False)
+    await callback.answer("📥 Скачиваю торрент...", show_alert=False)
 
-    client = await get_tracker_client()
+    client = await get_rutracker_client()
     if not client:
-        await callback.message.answer("❌ Session error.")
+        await callback.message.answer("❌ Ошибка сессии.")
         return
 
     try:
         torrent_data = await client.download_torrent(selected["topic_url"])
     except Exception as e:
-        await callback.message.answer(f"❌ Failed to download torrent: {e}")
+        await callback.message.answer(f"❌ Не удалось скачать торрент: {e}")
         return
 
     safe_title = re.sub(r'[<>:"/\\|?*\x00-\x1f]', '_', selected["title"])[:100]
@@ -530,13 +541,16 @@ async def handle_selection(callback: CallbackQuery):
     with open(filepath, "wb") as f:
         f.write(torrent_data)
 
-    await callback.message.answer(f"✅ Torrent:\n📁 `{filepath.name}`\nsaved and will be added to download queue.")
+    await callback.message.answer(
+        f"✅ Торрент сохранён:\n📁 `{filepath.name}`\n\n"
+        f"Woodpecker/qBittorrent автоматически добавит раздачу."
+    )
     user_search_sessions.pop(user_id, None)
 
 @dp.callback_query(F.data == "cancel")
 async def handle_cancel(callback: CallbackQuery):
     user_search_sessions.pop(callback.from_user.id, None)
-    await callback.message.edit_text("❌ Search cancelled.")
+    await callback.message.edit_text("❌ Поиск отменён.")
     await callback.answer()
 
 @dp.callback_query(F.data == "noop")
@@ -544,15 +558,15 @@ async def noop(callback: CallbackQuery):
     await callback.answer()
 
 async def main():
-    print("✅ bt-dl-bot started...")
+    print("✅ bt-dl-bot запущен...")
     print(f"📁 TORRENTS_DIR: {TORRENTS_DIR}")
-    if USE_TRACKER_AUTH:
+    if USE_RUTRACKER_AUTH:
         print(f"🔐 Rutracker: {TRACKER_LOGIN}")
     try:
         await dp.start_polling(bot)
     finally:
-        if tracker_client:
-            await tracker_client.close()
+        if rutracker_client:
+            await rutracker_client.close()
 
 def cli():
     """CLI entry point for Poetry script."""
