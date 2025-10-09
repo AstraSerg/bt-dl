@@ -37,7 +37,7 @@ user_search_sessions = {}
 
 class RutrackerClient:
     def __init__(self, login: str, password: str, user_agent: str):
-        self.login = login
+        self.username = login
         self.password = password
         self.user_agent = user_agent
         self.base_url = "https://rutracker.org/forum/"
@@ -48,30 +48,117 @@ class RutrackerClient:
         )
         self.is_logged_in = False
 
+
+
+
     async def login(self) -> bool:
         try:
+            print("\n" + "="*60)
+            print("🔍 НАЧАЛО ПРОЦЕССА ВХОДА НА RUTRACKER")
+            print("="*60)
+            
+            # Шаг 1: Запрос страницы входа
+            print("➡️ 1. Запрашиваем https://rutracker.org/forum/login.php")
             resp = await self.client.get(f"{self.base_url}login.php")
-            soup = BeautifulSoup(resp.text, "html.parser")
-            form = soup.find("form", {"id": "login-form"})
-            if not form:
+            print(f"   Статус: {resp.status_code}")
+            print(f"   URL после редиректа: {resp.url}")
+            
+            # Сохраняем HTML для анализа
+            with open("/tmp/rutracker_debug_login.html", "w", encoding="utf-8") as f:
+                f.write(resp.text)
+            print("   📄 HTML сохранён в /tmp/rutracker_debug_login.html")
+    
+            # Проверяем, не перенаправило ли на CAPTCHA или блокировку
+            if "captcha" in resp.text.lower() or "blocked" in resp.text.lower():
+                print("   ⚠️ Обнаружена CAPTCHA или блокировка!")
                 return False
-
+    
+            # Шаг 2: Парсим форму
+            print("\n➡️ 2. Ищем форму входа...")
+            soup = BeautifulSoup(resp.text, "html.parser")
+            
+            # Ищем по новому ID
+            form = soup.find("form", {"id": "login-form-quick"})
+            if not form:
+                print("   ❌ Форма с id='login-form-quick' НЕ НАЙДЕНА")
+                # Попробуем найти любую форму с login_username
+                form = soup.find("input", {"name": "login_username"})
+                if form:
+                    print("   ⚠️ Найдено поле login_username, но форма не распознана")
+                    form = form.find_parent("form")
+                    if form:
+                        print("   ✅ Найдена форма через родителя поля login_username")
+                    else:
+                        print("   ❌ Родительская форма не найдена")
+                else:
+                    print("   ❌ Поле login_username не найдено в HTML")
+                    return False
+            else:
+                print("   ✅ Форма найдена по id='login-form-quick'")
+    
+            # Шаг 3: Собираем данные формы
+            print("\n➡️ 3. Собираем данные формы:")
             data = {}
             for inp in form.find_all("input"):
                 name = inp.get("name")
                 if name:
-                    data[name] = inp.get("value") or ""
-
-            data["login_username"] = self.login
+                    value = inp.get("value") or ""
+                    data[name] = value
+                    print(f"   {name} = {value}")
+    
+            # Добавляем учётные данные
+            data["login_username"] = self.username
             data["login_password"] = self.password
-            data["login"] = "Вход"
-
-            resp = await self.client.post(f"{self.base_url}login.php", data=data)
-            self.is_logged_in = "profile.php" in resp.text or "Выход" in resp.text
-            return self.is_logged_in
+            data["login"] = "вход"  # именно строчная буква!
+            print(f"   login_username = {self.username}")
+            print(f"   login_password = {'*' * len(self.password)}")
+            print(f"   login = вход")
+    
+            # Шаг 4: Отправляем форму
+            print("\n➡️ 4. Отправляем данные на сервер...")
+            post_resp = await self.client.post(f"{self.base_url}login.php", data=data)
+            print(f"   Статус ответа: {post_resp.status_code}")
+            print(f"   URL после отправки: {post_resp.url}")
+    
+            # Сохраняем ответ
+            with open("/tmp/rutracker_debug_after_login.html", "w", encoding="utf-8") as f:
+                f.write(post_resp.text)
+            print("   📄 Ответ сохранён в /tmp/rutracker_debug_after_login.html")
+    
+            # Шаг 5: Проверяем успешность
+            print("\n➡️ 5. Проверяем, вошли ли мы...")
+            if "profile.php" in post_resp.text:
+                print("   ✅ УСПЕХ: найдена ссылка на profile.php")
+                self.is_logged_in = True
+                return True
+            elif "Выход" in post_resp.text:
+                print("   ✅ УСПЕХ: найдена кнопка 'Выход'")
+                self.is_logged_in = True
+                return True
+            elif "Неверное имя или пароль" in post_resp.text:
+                print("   ❌ ОШИБКА: Неверный логин или пароль")
+                return False
+            elif "captcha" in post_resp.text.lower():
+                print("   ❌ ОШИБКА: Требуется CAPTCHA")
+                return False
+            else:
+                print("   ❌ НЕИЗВЕСТНАЯ ОШИБКА: не удалось определить статус входа")
+                # Покажем фрагмент HTML
+                snippet = post_resp.text[:500].replace('\n', ' ')
+                print(f"   Первые 500 символов ответа: {snippet}...")
+                return False
+    
         except Exception as e:
-            print(f"Ошибка входа: {e}")
+            print(f"\n💥 КРИТИЧЕСКАЯ ОШИБКА: {e}")
+            import traceback
+            traceback.print_exc()
             return False
+        finally:
+            print("="*60)
+            print("КОНЕЦ ПРОЦЕССА ВХОДА")
+            print("="*60 + "\n")
+
+
 
     async def search(self, query: str, forum_id: Optional[str] = None):
         if not self.is_logged_in:
