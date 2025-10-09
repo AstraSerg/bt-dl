@@ -19,11 +19,11 @@ config = dotenv_values()
 BOT_TOKEN = config.get("BOT_TOKEN")
 RUTRACKER_LOGIN = config.get("RUTRACKER_LOGIN")
 RUTRACKER_PASSWORD = config.get("RUTRACKER_PASSWORD")
-TORRENTS_DIR = config.get("TORRENTS_DIR", "./torrents")
-USER_AGENT = config.get("USER_AGENT", "bt-dl-bot/0.1")
+TORRENTS_DIR = config.get("TORRENTS_DIR", "/tmp/t-files")
+USER_AGENT = config.get("USER_AGENT", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
 
 if not BOT_TOKEN:
-    raise RuntimeError("❌ BOT_TOKEN не задан в .env")
+    raise RuntimeError("I need BOT_TOKEN in .env. Exiting.")
 
 
 Path(TORRENTS_DIR).mkdir(parents=True, exist_ok=True)
@@ -160,68 +160,183 @@ class RutrackerClient:
 
 
 
+
+
+
     async def search(self, query: str, forum_id: Optional[str] = None):
         if not self.is_logged_in:
-            raise RuntimeError("Не авторизован")
+            raise RuntimeError("Not authenticated")
 
         url = f"{self.base_url}tracker.php?nm={quote(query)}"
         if forum_id:
             url += f"&f={forum_id}"
 
+        print(f"\nSearch URL: {url}")
+        
         resp = await self.client.get(url)
-        resp.raise_for_status()
+        print(f"Search status: {resp.status_code}")
+        
+        with open("/tmp/rutracker_search.html", "w", encoding="utf-8") as f:
+            f.write(resp.text)
+        print("Search results saved to /tmp/rutracker_search.html")
 
         soup = BeautifulSoup(resp.text, "html.parser")
-        rows = soup.select("table#tor-tbl tr.tor-tr")
+        
+        if "captcha" in resp.text.lower():
+            print("CAPTCHA detected")
+            return []
+
+        # Find links that point to viewtopic.php?t=...
+        title_links = soup.select('a[href*="viewtopic.php?t="]')
+        print(f"Found topic links by href: {len(title_links)}")
+
         results = []
-
-        for row in rows:
+        for link in title_links:
             try:
-                # Название раздачи
-                title_tag = row.select_one("a.tor-topic-title")
-                if not title_tag:
+                row = link.find_parent("tr")
+                if not row:
                     continue
-                title = title_tag.get_text(strip=True)
-                topic_url = urljoin(self.base_url, title_tag["href"])
+                if not row.get("data-topic_id"):
+                    print(f"Skipped row without data-topic_id: {link.get_text(strip=True)[:50]}")
+                    continue
 
-                # Форум
-                forum_tag = row.select_one("td.forum_name a.gen.f")
-                forum_name = forum_tag.get_text(strip=True) if forum_tag else "Неизвестно"
-                forum_id_match = forum_tag.get("href", "") if forum_tag else ""
-                forum_id = None
-                if "f=" in forum_id_match:
-                    forum_id = forum_id_match.split("f=")[-1].split("&")[0]
+                title = link.get_text(strip=True)
+                if not title or len(title) < 5:
+                    continue
+                    
+                topic_url = urljoin(self.base_url, link["href"])
+                row = link.find_parent("tr")
+                if not row:
+                    continue
 
-                # Размер и сиды
-                size_tag = row.select_one("td:nth-child(5)")
-                size = size_tag.get_text(strip=True) if size_tag else "?"
+                # Forum
+                forum_tag = row.select_one("td.f-name-col a.gen.f")
+                forum_name = forum_tag.get_text(strip=True) if forum_tag else "Unknown"
+                forum_id_val = None
+                if forum_tag and "f=" in forum_tag.get("href", ""):
+                    forum_id_val = forum_tag["href"].split("f=")[-1].split("&")[0]
 
+                # Size: look for <a class="tr-dl"> or td with class "tor-size"
+                size = "?"
+                size_tag = row.select_one("td.tor-size a.tr-dl")
+                if size_tag:
+                    size = size_tag.get_text(strip=True).replace("\xa0", " ")
+
+                # Seeders
                 seeders_tag = row.select_one("b.seedmed")
                 seeders = seeders_tag.get_text(strip=True) if seeders_tag else "0"
 
                 results.append({
                     "title": title,
                     "forum_name": forum_name,
-                    "forum_id": forum_id,
+                    "forum_id": forum_id_val,
                     "size": size,
                     "seeders": seeders,
                     "topic_url": topic_url,
                 })
             except Exception as e:
+                print(f"Skipped row: {e}")
                 continue
+
+        print(f"Parsed results: {len(results)}")
         return results
 
-    async def download_torrent(self, topic_url: str):
-        resp = await self.client.get(topic_url)
-        soup = BeautifulSoup(resp.text, "html.parser")
-        torrent_tag = soup.select_one("a[href*='/forum/dl.php?t=']")
-        if not torrent_tag:
-            raise ValueError("Torrent link not found")
+    
 
-        torrent_url = urljoin(self.base_url, torrent_tag["href"])
-        torrent_resp = await self.client.get(torrent_url)
-        torrent_resp.raise_for_status()
-        return torrent_resp.content
+
+
+
+
+    async def download_torrent(self, topic_url: str):
+        print(f"\n{'='*60}")
+        print(f"📥 START DOWNLOAD TORRENT")
+        print(f"Topic URL: {topic_url}")
+        print(f"{'='*60}")
+
+        try:
+            # Step 1: Load topic page
+            print("➡️ 1. Loading topic page...")
+            topic_resp = await self.client.get(topic_url)
+            topic_resp.raise_for_status()
+            print(f"   Status: {topic_resp.status_code}")
+
+            # Save HTML for analysis
+            with open("/tmp/rutracker_topic.html", "w", encoding="utf-8") as f:
+                f.write(topic_resp.text)
+            print("   📄 Topic page saved to /tmp/rutracker_topic.html")
+
+            # Step 2: Parse HTML
+            print("\n➡️ 2. Parsing HTML for torrent link...")
+            soup = BeautifulSoup(topic_resp.text, "html.parser")
+
+            # Try multiple selectors
+            selectors = [
+                'a[href*="/dl.php?t="]',
+                'a.tr-dl',
+                'a.dl-stub',
+                'a[href^="dl.php?t="]',
+                'a[href*="dl.php"]'
+            ]
+
+            torrent_tag = None
+            for selector in selectors:
+                torrent_tag = soup.select_one(selector)
+                if torrent_tag:
+                    print(f"   ✅ Found with selector: {selector}")
+                    break
+                else:
+                    print(f"   ❌ Not found: {selector}")
+
+            if not torrent_tag:
+                print("\n   ❌ NO TORRENT LINK FOUND")
+                # Show all links containing 'dl.php'
+                all_dl_links = soup.select('a[href*="dl.php"]')
+                print(f"   Links containing 'dl.php': {len(all_dl_links)}")
+                for i, link in enumerate(all_dl_links[:3]):
+                    href = link.get("href", "")
+                    text = link.get_text(strip=True)[:50]
+                    print(f"     {i+1}. href='{href}' text='{text}'")
+                raise ValueError("Torrent download link not found")
+
+            # Step 3: Extract URL
+            href = torrent_tag.get("href", "")
+            torrent_url = urljoin(self.base_url, href)
+            print(f"\n➡️ 3. Torrent download URL: {torrent_url}")
+
+            # Step 4: Download with Referer
+            print("\n➡️ 4. Downloading torrent file...")
+            headers = {"Referer": topic_url}
+            torrent_resp = await self.client.get(torrent_url, headers=headers)
+            torrent_resp.raise_for_status()
+            print(f"   Status: {torrent_resp.status_code}")
+            print(f"   Content-Type: {torrent_resp.headers.get('content-type', 'N/A')}")
+            print(f"   Content-Length: {len(torrent_resp.content)} bytes")
+
+            # Validate it's a torrent
+            if torrent_resp.content.startswith(b'd8:') or b'announce' in torrent_resp.content[:200]:
+                print("   ✅ Valid torrent file detected")
+            else:
+                print("   ⚠️ Warning: content may not be a torrent file")
+
+            print(f"{'='*60}")
+            print("✅ TORRENT DOWNLOAD SUCCESSFUL")
+            print(f"{'='*60}\n")
+
+            return torrent_resp.content
+
+        except Exception as e:
+            print(f"\n💥 ERROR: {e}")
+            import traceback
+            traceback.print_exc()
+            print(f"{'='*60}")
+            raise
+
+
+
+
+
+
+
 
     async def close(self):
         await self.client.aclose()
@@ -282,21 +397,21 @@ async def handle_search(message: Message):
         await message.answer("❌ Бот не настроен для Rutracker.")
         return
 
-    await message.answer("🔍 Ищу... (10–20 секунд)")
+    await message.answer("🔍 Searching...")
 
     client = await get_rutracker_client()
     if not client:
-        await message.answer("❌ Ошибка авторизации.")
+        await message.answer("❌ Authentication error.")
         return
 
     try:
         results = await client.search(query)
     except Exception as e:
-        await message.answer(f"❌ Ошибка поиска: {e}")
+        await message.answer(f"❌ Search error: {e}")
         return
 
     if not results:
-        await message.answer("Ничего не найдено 😕")
+        await message.answer("Nothing found")
         return
 
     # Сохраняем сессию поиска
@@ -309,7 +424,7 @@ async def handle_search(message: Message):
     # Формируем текст
     text = f"Найдено {len(results)} результатов:\n\n"
     for i, r in enumerate(results[:8]):
-        text += f"{i+1}. {r['title']}\n   📁 {r['forum_name']}\n   📦 {r['size']} | 💎 {r['seeders']}\n\n"
+        text += f"{i+1}. {r['title']}\n📁 {r['forum_name']}\nsize {r['size']} | seeders: {r['seeders']}\n\n"
 
     if len(results) > 8:
         text += f"... и ещё {len(results) - 8} раздач."
