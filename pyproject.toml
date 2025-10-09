@@ -25,9 +25,6 @@ dependencies = [
     "beautifulsoup4>=4.12.0",
 ]
 
-[project.scripts]
-bt-dl-bot = "bt_dl.bot:main"
-
 [project.urls]
 Homepage = "https://github.com/AstraSerg/bt-dl"
 Repository = "https://github.com/AstraSerg/bt-dl"
@@ -58,4 +55,3 @@ generate-setup-file = false
 [[tool.poetry.packages]]
 include = "bt_dl"
 from = "src"
-
